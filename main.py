@@ -1,3 +1,4 @@
+
 from aiogram import Bot, Dispatcher, types, executor
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.dispatcher import FSMContext
@@ -11,6 +12,7 @@ API_TOKEN = '8066927688:AAFipaqyM4qoUODZ705PDocSZSSEEGWCVik'
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
+# База данных SQLite
 conn = sqlite3.connect("users.db")
 c = conn.cursor()
 c.execute("""
@@ -21,8 +23,16 @@ c.execute("""
         address TEXT
     )
 """)
+c.execute("""
+    CREATE TABLE IF NOT EXISTS manual_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        message TEXT
+    )
+""")
 conn.commit()
 
+# Главное меню
 main_menu = InlineKeyboardMarkup(row_width=1)
 main_menu.add(
     InlineKeyboardButton("🎲 Случайный заказ", callback_data="random"),
@@ -34,6 +44,9 @@ class UserData(StatesGroup):
     name = State()
     phone = State()
     address = State()
+
+class ManualInput(StatesGroup):
+    request = State()
 
 @dp.message_handler(commands=['start'])
 async def start_cmd(message: types.Message):
@@ -72,12 +85,30 @@ async def process_address(message: types.Message, state: FSMContext):
     await message.answer("✅ Данные сохранены. Что будем делать дальше?", reply_markup=main_menu)
     await state.finish()
 
-@dp.callback_query_handler(lambda c: c.data in ['random', 'manual'])
+@dp.callback_query_handler(lambda c: c.data == 'manual')
+async def manual_entry(callback_query: types.CallbackQuery):
+    await bot.edit_message_text(
+        chat_id=callback_query.message.chat.id,
+        message_id=callback_query.message.message_id,
+        text="✍ Введите список продуктов и бюджет (например: пятерочка лапша сосиски майонез 700р):"
+    )
+    await ManualInput.request.set()
+
+@dp.message_handler(state=ManualInput.request)
+async def process_manual_input(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    c.execute("INSERT INTO manual_requests (user_id, message) VALUES (?, ?)", (user_id, message.text))
+    conn.commit()
+
+    await message.answer("✅ Запрос принят: \n" + message.text + "\n\n(Формирование заказа скоро будет доступно)", reply_markup=main_menu)
+    await state.finish()
+
+@dp.callback_query_handler(lambda c: c.data == 'random')
 async def dummy_handler(callback_query: types.CallbackQuery):
     await bot.edit_message_text(
         chat_id=callback_query.message.chat.id,
         message_id=callback_query.message.message_id,
-        text=f"Функция '{callback_query.data}' в разработке. Возвращаюсь в меню..."
+        text=f"🎲 Рандомная функция пока в разработке. Возвращаюсь в меню..."
     )
     await asyncio.sleep(2)
     await bot.edit_message_text(
