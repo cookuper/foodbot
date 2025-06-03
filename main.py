@@ -6,13 +6,14 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 import sqlite3
 import asyncio
+import requests
 
 API_TOKEN = '8066927688:AAFipaqyM4qoUODZ705PDocSZSSEEGWCVik'
+PUPPETEER_URL = 'https://foodbot-t75k.onrender.com/generate?query='
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
-# База данных SQLite
 conn = sqlite3.connect("users.db")
 c = conn.cursor()
 c.execute("""
@@ -32,7 +33,6 @@ c.execute("""
 """)
 conn.commit()
 
-# Главное меню
 main_menu = InlineKeyboardMarkup(row_width=1)
 main_menu.add(
     InlineKeyboardButton("🎲 Случайный заказ", callback_data="random"),
@@ -97,10 +97,20 @@ async def manual_entry(callback_query: types.CallbackQuery):
 @dp.message_handler(state=ManualInput.request)
 async def process_manual_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    c.execute("INSERT INTO manual_requests (user_id, message) VALUES (?, ?)", (user_id, message.text))
+    text = message.text.strip()
+    c.execute("INSERT INTO manual_requests (user_id, message) VALUES (?, ?)", (user_id, text))
     conn.commit()
 
-    await message.answer("✅ Запрос принят: \n" + message.text + "\n\n(Формирование заказа скоро будет доступно)", reply_markup=main_menu)
+    try:
+        response = requests.get(PUPPETEER_URL + text)
+        if response.status_code == 200:
+            result = response.text
+        else:
+            result = "⚠ Ошибка от сервера Puppeteer."
+    except Exception as e:
+        result = f"❌ Не удалось связаться с сервером: {e}"
+
+    await message.answer(f"🔍 Запрос принят: \n{text}\n\n📦 Ответ: \n{result}", reply_markup=main_menu)
     await state.finish()
 
 @dp.callback_query_handler(lambda c: c.data == 'random')
