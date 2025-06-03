@@ -1,7 +1,0 @@
-
-services:
-  - type: web
-    name: puppeteer-server
-    runtime: node
-    buildCommand: npm install
-    startCommand: node server.js
