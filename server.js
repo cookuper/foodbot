@@ -19,7 +19,7 @@ app.get('/generate', async (req, res) => {
 
   try {
     await page.goto('https://eda.yandex.ru');
-    await page.waitForTimeout(3000); // ждём загрузку
+    await page.waitForTimeout(3000);
     await browser.close();
     res.send(`🔍 Запрос получен: ${query}. (Обработка пока тестовая)`);
   } catch (err) {
